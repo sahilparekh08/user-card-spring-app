@@ -65,25 +65,8 @@ public class CreditCard {
         }
     }
 
-    private int getIndexForBalanceQuery(LocalDate date) {
-        if (balanceHistory == null || balanceHistory.isEmpty()) {
-            return -1;
-        }
-        if (date.isAfter(balanceHistory.get(0).getDate())) {
-            return 0;
-        }
-        if (date.isBefore(balanceHistory.get(balanceHistory.size() - 1).getDate())) {
-            return -1;
-        }
-        BalanceHistory bH = new BalanceHistory();
-        bH.setDate(date);
-        int index = Collections.binarySearch(balanceHistory, bH, (a, b) -> b.getDate().compareTo(a.getDate()));
-        if (index >= 0) {
-            return index;
-        }
-        return -index - 1;
-    }
-
+    // No usage for thee below method.
+    // Below method is just to showcase how would a getBalance function would work for a given date
     public double getBalance(LocalDate date) {
         int index = getIndexForBalanceQuery(date);
         if (index == -1) {
@@ -92,6 +75,9 @@ public class CreditCard {
         return balanceHistory.get(index).getBalance();
     }
 
+    // No usage for thee below method.
+    // Below method is just to showcase how would a getBalance function wwould ork for a given date
+    // by doing a closest date search as described in the above TODOs
     public double getBalanceOnClosestDate(LocalDate date) {
         int index = getIndexForBalanceQuery(date);
         if (index == -1) {
@@ -111,5 +97,25 @@ public class CreditCard {
         long diff1 = Math.abs(date1.toEpochDay() - date.toEpochDay());
         long diff2 = Math.abs(date2.toEpochDay() - date.toEpochDay());
         return diff1 < diff2 ? balanceHistory.get(index).getBalance() : balanceHistory.get(index + 1).getBalance();
+    }
+
+    // Helper function for the above getBalance and getBalanceOnClosestDate methods
+    private int getIndexForBalanceQuery(LocalDate date) {
+        if (balanceHistory == null || balanceHistory.isEmpty()) {
+            return -1;
+        }
+        if (date.isAfter(balanceHistory.get(0).getDate())) {
+            return 0;
+        }
+        if (date.isBefore(balanceHistory.get(balanceHistory.size() - 1).getDate())) {
+            return -1;
+        }
+        BalanceHistory bH = new BalanceHistory();
+        bH.setDate(date);
+        int index = Collections.binarySearch(balanceHistory, bH, (a, b) -> b.getDate().compareTo(a.getDate()));
+        if (index >= 0) {
+            return index;
+        }
+        return -index - 1;
     }
 }
