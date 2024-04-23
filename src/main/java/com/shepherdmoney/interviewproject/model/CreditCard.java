@@ -57,18 +57,24 @@ public class CreditCard {
     public void addBalanceHistory(BalanceHistory bH) {
         balanceHistory.add(bH);
         balanceHistory.sort((a, b) -> b.getDate().compareTo(a.getDate()));
+
         int index = Collections.binarySearch(balanceHistory, bH, (a, b) -> b.getDate().compareTo(a.getDate()));
+        // Increment is the difference between the balance for bH and the balance for the date that comes before it
+        // If bH is the smallest date, then this balance is the increment for all the in the list which will be the dates that comne after this
         double increment = index == balanceHistory.size() - 1
-                ? 0 : balanceHistory.get(index).getBalance() - balanceHistory.get(index + 1).getBalance();
-        for (int i = 0; i < index; i++) {
+                ? balanceHistory.get(index).getBalance()
+                : balanceHistory.get(index).getBalance() - balanceHistory.get(index + 1).getBalance();
+
+        // Loop to propogate the increment to all the dates that come after bH's date
+        for (int i = 0; i < index; i++)
             balanceHistory.get(i).setBalance(balanceHistory.get(i).getBalance() + increment);
-        }
     }
 
     // No usage for thee below method.
     // Below method is just to showcase how would a getBalance function would work for a given date
     public double getBalance(LocalDate date) {
         int index = getIndexForBalanceQuery(date);
+
         if (index == -1) {
             return 0;
         }
@@ -80,18 +86,22 @@ public class CreditCard {
     // by doing a closest date search as described in the above TODOs
     public double getBalanceOnClosestDate(LocalDate date) {
         int index = getIndexForBalanceQuery(date);
+
         if (index == -1) {
             return 0;
         }
+
         // If the date is found, return the balance
         if (balanceHistory.get(index).getDate().isEqual(date)) {
             return balanceHistory.get(index).getBalance();
         }
+
         // If the date is not found, return the balance of the closest date which is defined by the index or index+1
         // compare dates at index and index+1 with the given date
         if (index == 0 || index == balanceHistory.size() - 1) {
             return balanceHistory.get(index).getBalance();
         }
+
         LocalDate date1 = balanceHistory.get(index).getDate();
         LocalDate date2 = balanceHistory.get(index + 1).getDate();
         long diff1 = Math.abs(date1.toEpochDay() - date.toEpochDay());
@@ -110,9 +120,11 @@ public class CreditCard {
         if (date.isBefore(balanceHistory.get(balanceHistory.size() - 1).getDate())) {
             return -1;
         }
+
         BalanceHistory bH = new BalanceHistory();
         bH.setDate(date);
         int index = Collections.binarySearch(balanceHistory, bH, (a, b) -> b.getDate().compareTo(a.getDate()));
+
         if (index >= 0) {
             return index;
         }
