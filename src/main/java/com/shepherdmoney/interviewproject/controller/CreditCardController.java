@@ -141,53 +141,76 @@ public class CreditCardController {
 
         LOGGER.info("Received request to update balance for multiple credit cards");
 
-        int totalRequests = payload.length;
-        List<Integer> badRequestIds = new ArrayList<>();
-
+        // List of credit cards to no make updates on
+        List<Integer> cardsFailedOnUpdate = new ArrayList<>();
         // only save the credit card if all requests are successful to keep the transaction atomic
-        List<CreditCard> cardsToSave = new ArrayList<>();
+        Map<Integer, List<CreditCard>> cardIdToCardUpdateMap = new HashMap<>();
+        Map<Integer, String> cardIdToCardNumberMap = new HashMap<>();
 
-        for (int i = 0; i < totalRequests; i++) {
-            LOGGER.info("Received request to update balance for credit card with number [" + payload[i].getCreditCardNumber() + "]");
-            UpdateBalancePayload pl = payload[i];
+        for (UpdateBalancePayload updateBalancePayload : payload) {
+            LOGGER.info("Received request to update balance for credit card with number [" + updateBalancePayload.getCreditCardNumber() + "]");
 
+            CreditCard creditCard = null;
             try {
-                CreditCard creditCard = creditCardRepository.findAll().stream()
-                        .filter(card -> card.getNumber().equals(pl.getCreditCardNumber()))
+                creditCard = creditCardRepository.findAll().stream()
+                        .filter(card -> card.getNumber().equals(updateBalancePayload.getCreditCardNumber()))
                         .findFirst().orElse(null);
                 if (creditCard == null) {
-                    LOGGER.warning("Credit card with number [" + pl.getCreditCardNumber() + "] does not exist");
-                    badRequestIds.add(i);
+                    LOGGER.warning("Credit card with number [" + updateBalancePayload.getCreditCardNumber() + "] does not exist");
                     continue;
                 }
 
+                // Check if the credit card has failed on a previous update. If yes then no need to accept any more updates for this card
+                if (cardsFailedOnUpdate.contains(creditCard.getId())) {
+                    LOGGER.warning("Credit card with number [" + updateBalancePayload.getCreditCardNumber() + "] failed on a previous update");
+                    cardIdToCardUpdateMap.remove(creditCard.getId());
+                    continue;
+                }
+
+                if (!cardIdToCardUpdateMap.containsKey(creditCard.getId())) {
+                    cardIdToCardUpdateMap.put(creditCard.getId(), new ArrayList<>());
+                }
+                cardIdToCardNumberMap.put(creditCard.getId(), updateBalancePayload.getCreditCardNumber());
+
                 BalanceHistory balanceHistory = new BalanceHistory();
-                balanceHistory.setDate(pl.getBalanceDate());
-                balanceHistory.setBalance(pl.getBalanceAmount());
+                balanceHistory.setDate(updateBalancePayload.getBalanceDate());
+                balanceHistory.setBalance(updateBalancePayload.getBalanceAmount());
                 balanceHistory.setCard(creditCard);
                 creditCard.addBalanceHistory(balanceHistory);
 
-                cardsToSave.add(creditCard);
+                cardIdToCardUpdateMap.get(creditCard.getId()).add(creditCard);
             } catch (Exception e) {
-                LOGGER.severe(e.getMessage());
-                LOGGER.severe("Error updating balance for credit card with number [" + pl.getCreditCardNumber() + "]");
-                badRequestIds.add(i);
+                LOGGER.severe("Error updating balance for credit card with number ["
+                        + updateBalancePayload.getCreditCardNumber() + "] with message: "
+                        + e.getMessage());
+                if (creditCard != null) {
+                    cardsFailedOnUpdate.add(creditCard.getId());
+                }
             }
         }
 
-        // Return 200 OK only if all requests were successful
-        if (badRequestIds.isEmpty()) {
-            creditCardRepository.saveAll(cardsToSave);
-            for(CreditCard card : cardsToSave) {
-                LOGGER.info("Updated balance for credit card with number [" + card.getNumber() + "]");
-            }
-            LOGGER.info("Update balance successful");
-            return ResponseEntity.ok().body("Update balance successful");
-        } else {
-            LOGGER.warning("Bad Request for the following requests: " + badRequestIds);
+        // If all requests are bad, return bad request
+        if (cardIdToCardUpdateMap.isEmpty()) {
             LOGGER.severe("Aborting update balance for all payloads due to bad requests");
             return ResponseEntity.badRequest().body("Aborting update balance for all payloads due to bad requests");
         }
+
+        // Save all credit cards which have had all of their payloads to be successfully updated
+        for (Map.Entry<Integer, List<CreditCard>> cardIdToCardList : cardIdToCardUpdateMap.entrySet()) {
+            List<CreditCard> cardsToSave = cardIdToCardList.getValue();
+            creditCardRepository.saveAll(cardsToSave);
+            LOGGER.info("Updated balance for credit card with number [" + cardIdToCardList.getKey() + "]");
+        }
+
+        // Send a 200 OK response with the list of credit cards that were successfully updated
+        StringBuilder response = new StringBuilder();
+        response.append("Update balance successful for cards: [");
+        for (int cardId : cardIdToCardUpdateMap.keySet())
+            response.append(cardIdToCardNumberMap.get(cardId)).append(", ");
+        response.delete(response.length() - 2, response.length());
+        response.append("]");
+        LOGGER.info(response.toString());
+        return ResponseEntity.ok().body(response.toString());
     }
 
 }
