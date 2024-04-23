@@ -50,7 +50,7 @@ public class CreditCardController {
             }
 
             // Check if the credit card already exists for the user
-            // Do not allow addition of this card even for a different bank since card numbers should, in practive, be unique
+            // Do not allow addition of this card even for a different bank since card numbers should, in practice, be unique
             if (owner.getCreditCards().stream().anyMatch(card -> card.getNumber().equals(payload.getCardNumber()))) {
                 LOGGER.warning("Credit card with number [" + payload.getCardNumber() + "] already exists for user with id [" + payload.getUserId() + "]");
                 return ResponseEntity.badRequest().build();
