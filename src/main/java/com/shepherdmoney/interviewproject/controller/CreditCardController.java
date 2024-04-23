@@ -157,7 +157,8 @@ public class CreditCardController {
                         .findFirst().orElse(null);
                 if (creditCard == null) {
                     LOGGER.warning("Credit card with number [" + pl.getCreditCardNumber() + "] does not exist");
-                    return ResponseEntity.badRequest().build();
+                    badRequestIds.add(i);
+                    continue;
                 }
 
                 BalanceHistory balanceHistory = new BalanceHistory();
