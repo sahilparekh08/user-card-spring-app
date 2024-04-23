@@ -13,7 +13,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.logging.Logger;
 
 
@@ -33,12 +35,14 @@ public class CreditCardController {
         //       Return 200 OK with the credit card id if the user exists and credit card is successfully associated with the user
         //       Return other appropriate response code for other exception cases
         //       Do not worry about validating the card number, assume card number could be any arbitrary format and length
+
         LOGGER.info("Received request to add credit card with number [" + payload.getCardNumber() + "] to user with id [" + payload.getUserId() + "]");
         try {
             CreditCard creditCard = new CreditCard();
             creditCard.setIssuanceBank(payload.getCardIssuanceBank());
             creditCard.setNumber(payload.getCardNumber());
 
+            // Check if the user exists
             User owner = userRepository.findById(payload.getUserId()).orElse(null);
             if (owner == null) {
                 LOGGER.warning("User with id [" + payload.getUserId() + "] does not exist");
@@ -70,6 +74,7 @@ public class CreditCardController {
     public ResponseEntity<List<CreditCardView>> getAllCardOfUser(@RequestParam int userId) {
         // TODO: return a list of all credit card associated with the given userId, using CreditCardView class
         //       if the user has no credit card, return empty list, never return null
+
         LOGGER.info("Received request to retrieve all credit cards of user with id [" + userId + "]");
         try {
             // Retrieve all credit cards associated with the given userId
@@ -85,6 +90,7 @@ public class CreditCardController {
                 return ResponseEntity.ok(List.of());
             }
 
+            // Convert the list of credit cards to a list of CreditCardView objects
             List<CreditCardView> creditCardViews = creditCards.stream()
                     .map(creditCard -> new CreditCardView(creditCard.getIssuanceBank(), creditCard.getNumber()))
                     .toList();
@@ -100,8 +106,10 @@ public class CreditCardController {
     public ResponseEntity<Integer> getUserIdForCreditCard(@RequestParam String creditCardNumber) {
         // TODO: Given a credit card number, efficiently find whether there is a user associated with the credit card
         //       If so, return the user id in a 200 OK response. If no such user exists, return 400 Bad Request
+
         LOGGER.info("Received request to retrieve user id for credit card with number [" + creditCardNumber + "]");
         try {
+            // Traverse over all credit cards to find the one with the given credit card number
             CreditCard creditCard = creditCardRepository.findAll().stream()
                     .filter(card -> card.getNumber().equals(creditCardNumber))
                     .findFirst().orElse(null);
@@ -130,10 +138,14 @@ public class CreditCardController {
         //      [{date: 4/12, balance: 120}, {date: 4/11, balance: 110}, {date: 4/10, balance: 100}]
         //      Return 200 OK if update is done and successful, 400 Bad Request if the given card number
         //        is not associated with a card.
+
         LOGGER.info("Received request to update balance for multiple credit cards");
 
         int totalRequests = payload.length;
         List<Integer> badRequestIds = new ArrayList<>();
+
+        // only save the credit card if all requests are successful to keep the transaction atomic
+        List<CreditCard> cardsToSave = new ArrayList<>();
 
         for (int i = 0; i < totalRequests; i++) {
             LOGGER.info("Received request to update balance for credit card with number [" + payload[i].getCreditCardNumber() + "]");
@@ -154,8 +166,7 @@ public class CreditCardController {
                 balanceHistory.setCard(creditCard);
                 creditCard.addBalanceHistory(balanceHistory);
 
-                creditCardRepository.save(creditCard);
-                LOGGER.info("Updated balance for credit card with number [" + pl.getCreditCardNumber() + "]");
+                cardsToSave.add(creditCard);
             } catch (Exception e) {
                 LOGGER.severe(e.getMessage());
                 LOGGER.severe("Error updating balance for credit card with number [" + pl.getCreditCardNumber() + "]");
@@ -163,12 +174,18 @@ public class CreditCardController {
             }
         }
 
+        // Return 200 OK only if all requests were successful
         if (badRequestIds.isEmpty()) {
+            creditCardRepository.saveAll(cardsToSave);
+            for(CreditCard card : cardsToSave) {
+                LOGGER.info("Updated balance for credit card with number [" + card.getNumber() + "]");
+            }
             LOGGER.info("Update balance successful");
             return ResponseEntity.ok().body("Update balance successful");
         } else {
             LOGGER.warning("Bad Request for the following requests: " + badRequestIds);
-            return ResponseEntity.badRequest().body("Bad Request for the following requests: " + badRequestIds);
+            LOGGER.severe("Aborting update balance for all payloads due to bad requests");
+            return ResponseEntity.badRequest().body("Aborting update balance for all payloads due to bad requests");
         }
     }
 
